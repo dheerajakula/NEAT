@@ -1,158 +1,192 @@
 import random
 import gym
-import math
+import numpy as np
+from tabulate import tabulate
+import copy
 
-# Each Node has a innovation number incoming nodes and outgoing nodes
-class Node:
-    def __init__(self):
-        self.incoming_nodes = {}
-        self.outgoing_nodes = {}
-        self.val = 0
-        self.computed = False
-    
-    def add_incoming_node(self, node, weight):
-        self.incoming_nodes[node] = weight
-    
-    def add_outgoing_node(self, node, weight):
-        self.outgoing_nodes[node] = weight
-
-# define the neural network class
-class NeuralNetwork:
-    def __init__(self, no_of_inputs, no_of_outputs):
-        self.input_nodes = []
-        self.output_nodes = []
-        self.hidden_nodes = []
-
-         # first create the input nodes
-        for i in range(no_of_inputs):
-            node = Node()
-            self.input_nodes.append(node)
-        
-        # then create the output nodes
-        for i in range(no_of_outputs):
-            node = Node()
-            self.output_nodes.append(node)
-
-    # compute the output of the neural network given the input
-    def compute_output(self, input_values):
-        # set the input values
-        for i in range(len(input_values)):
-            self.input_nodes[i].val = input_values[i]
-            self.input_nodes[i].computed = True
-
-        # compute the output values for the output nodes
-        for node in self.output_nodes:
-            self.recurse_nodes(node)
-        
-        # return the output values
-        output_values = []
-        for node in self.output_nodes:
-            output_values.append(node.val)
-        
-        # reset the computed values
-        for node in self.input_nodes:
-            node.computed = False
-            node.val = 0
-        for node in self.hidden_nodes:
-            node.computed = False
-            node.val = 0
-        for node in self.output_nodes:
-            node.computed = False
-            node.val = 0
-
-        return output_values
-        
-    # backtrack to get the value of output nodes
-    def recurse_nodes(self, node):
-        if node.computed:
-            return node.val
-        else:
-            for n in node.incoming_nodes:
-                if n.computed:
-                    node.val += n.val * node.incoming_nodes[n]
-                else:
-                    node.val += self.recurse_nodes(n) * node.incoming_nodes[n]
-
-            node.computed = True
-
-            # if output node, apply sigmoid activation function
-            if node in self.output_nodes:
-                node.val = 1 / (1 + math.exp(-node.val))
-
-            # apply relu activation function
-            elif node.val < 0:
-                node.val = 0
-
-            return node.val
+from NeuralNetwork import *
         
 # Each Gene contains In node, Out node, Weight, isEnabled, and an innovation number
 class Gene:
-    
-    def __init__(self, in_node, out_node, weight, innovation_number):
-        self.in_node = in_node
-        self.out_node = out_node
+    def __init__(self, in_node_id, out_node_id, weight, innovation_number):
+        self.in_node_id = in_node_id
+        self.out_node_id = out_node_id
         self.weight = weight
         self.innovation_number = innovation_number
         self.isEnabled = True
 
+    def disable(self):
+        self.isEnabled = False
+
+    def __str__(self):
+        return str(self.in_node_id) + " -> " + str(self.out_node_id) + " : " + str(self.weight) + " : " + str(self.isEnabled) + " : " + str(self.innovation_number)
+
 # genome in NEAT algorithm is a collection of genes
 class Genome:
     
-    def __init__(self, no_of_inputs, no_of_outputs):
-        self.innovation_number = 1
-        self.network = NeuralNetwork(no_of_inputs, no_of_outputs)
-        self.genes = []
-        self.env = gym.make('CartPole-v0')
-        # now connect every input node to every output node
-        for in_node in self.network.input_nodes:
-            for out_node in self.network.output_nodes:
-                weight = random.uniform(-1, 1)
-                gene = Gene(in_node, out_node, weight, self.innovation_number)
-                self.genes.append(gene)
-                self.innovation_number += 1
-                in_node.add_outgoing_node(out_node, weight)
-                out_node.add_incoming_node(in_node, weight)
-    
-    def mutate_add_connection(self):
+    def __init__(self, NEATAlgorithm, no_of_inputs, no_of_outputs, env_name, no_of_rollouts):
         
+        self.NEATAlgorithm = NEATAlgorithm
+        self.no_of_inputs = no_of_inputs
+        self.no_of_outputs = no_of_outputs
+        self.env_name = env_name
+        self.no_of_rollouts = no_of_rollouts
+
+        self.genes = []
+        self.fitness = 0
+        self.node_id = 0
+        
+        # now connect every input node to every output node
+        count = 1
+
+        for in_node_id in range(1, no_of_inputs + 1):
+            for out_node_id in range(no_of_inputs + 1, no_of_inputs + no_of_outputs + 1):
+                weight = random.uniform(-1, 1)
+                gene = Gene(in_node_id, out_node_id, weight, count)
+                self.genes.append(gene)
+                count += 1
+        self.node_id = no_of_inputs + no_of_outputs + 1
     
-    def getFitness(self):
+    def mutate_weights(self, mutation_rate):
+        for gene in self.genes:
+            if random.random() < mutation_rate:
+                # add little random noise to the weight
+                gene.weight += random.uniform(-0.1, 0.1)
+                # clip the weight
+                if gene.weight > 1:
+                    gene.weight = 1
+                elif gene.weight < -1:
+                    gene.weight = -1
+
+    def mutate_add_connection(self, mutation_rate):
+        pass
+
+    def mutate_add_node(self, mutation_rate):
+        for i in range(len(self.genes)):
+
+            gene = self.genes[i]
+            if random.random() < mutation_rate:
+                # disable the previous gene
+                gene.disable()
+
+                # create two new genes and add them to the genome
+                new_gene1 = Gene(gene.in_node_id, self.node_id, 1, self.NEATAlgorithm.innovation_number)
+                self.NEATAlgorithm.innovation_number += 1
+                self.genes.append(new_gene1)
+
+                new_gene2 = Gene(self.node_id, gene.out_node_id, gene.weight, self.NEATAlgorithm.innovation_number)
+                self.NEATAlgorithm.innovation_number += 1
+                self.genes.append(new_gene2)
+
+                # increment the node id
+                self.node_id += 1
+
+    def mutate(self, mutation_rate):
+        mutation_rate = mutation_rate/len(self.genes)
+
+        self.mutate_weights(mutation_rate)
+
+        self.mutate_add_connection(mutation_rate)
+
+        self.mutate_add_node(mutation_rate/self.no_of_outputs)
+
+    def crossover(self, parent2, crossover_rate):
+        
+        parent1 = self
+        parent2 = parent2
+
+        if(random.random() < crossover_rate):
+            # get all the possible innovation numbers
+            map_innovation_number_to_gene = {}
+
+            # map innovation number to gene
+            for gene in parent1.genes:
+                map_innovation_number_to_gene[gene.innovation_number] = gene
+
+            for gene in parent2.genes:
+                if gene.innovation_number not in map_innovation_number_to_gene:
+                    map_innovation_number_to_gene[gene.innovation_number] = gene
+                else:
+                    if parent2.fitness > parent1.fitness:
+                        map_innovation_number_to_gene[gene.innovation_number] = gene
+
+            # copy the genes from the map
+            child_genes = []
+            for key in map_innovation_number_to_gene:
+                gene = copy.copy(map_innovation_number_to_gene[key])
+                child_genes.append(gene)
+
+            # create a new genome
+            child = Genome(self.NEATAlgorithm, self.no_of_inputs, self.no_of_outputs, self.env_name, self.no_of_rollouts)
+
+            child.genes = child_genes
+            
+            return child
+        else:
+            return self
+            
+
+    def construct_network(self):
+
+        network = NeuralNetwork(self.no_of_inputs, self.no_of_outputs)
+
+        for gene in self.genes:
+            if gene.isEnabled:
+                network.add_node(gene.in_node_id)
+                network.add_node(gene.out_node_id)
+                network.add_connection(gene.in_node_id, gene.out_node_id, gene.weight)
+        
+        return network
+            
+    def render(self):
+        network = self.construct_network()
+        env = gym.make(self.env_name)
         total_reward = 0
-        observation = self.env.reset()
-        while(1):
-            action = self.network.compute_output(observation)
-            # map sigmoid output to action
-            if action[0] > 0.5:
-                action = 1
-            else:
-                action = 0
-           
-            observation, reward, done, info = self.env.step(action)
-            total_reward += reward
-            if done:
-                break
-        self.env.close()
-        return total_reward
+
+        for i_episode in range(5):
+            observation = env.reset()
+            while(1):
+                env.render()
+                action = network.compute_output(observation)
+                # find the max action from the action space
+                max_val = max(action)
+                max_index = np.argmax(action)
+                action = max_index
+            
+                observation, reward, done, info = env.step(action)
+                total_reward += reward
+                if done:
+                    break
+        env.close()
+        print("Final Total reward: ", total_reward/5)
 
     def evaluate(self):
-        for i_episode in range(10):
-            total_reward = 0
-            observation = self.env.reset()
+        network = self.construct_network()
+        env = gym.make(self.env_name)
+        total_reward = 0
+        
+        for i_episode in range(self.no_of_rollouts):
+            observation = env.reset()
             while(1):
-                self.env.render()
-                action = self.network.compute_output(observation)
-                # map sigmoid output to action
-                if action[0] > 0.5:
-                    action = 1
-                else:
-                    action = 0
-                observation, reward, done, info = self.env.step(action)
+                action = network.compute_output(observation)
+
+                # find the max action from the action space
+                max_val = max(action)
+                max_index = np.argmax(action)
+                action = max_index
+            
+                observation, reward, done, info = env.step(action)
                 total_reward += reward
-
                 if done:
-                    print("done")
                     break
+        env.close()
+        self.fitness = total_reward/self.no_of_rollouts
 
-            print(total_reward)
-
-        self.env.close()
+    def __str__(self):
+        # print each gene in genome pretty
+        print("length of genome: ", len(self.genes))
+        s = "**********************************************************\n"
+        for gene in self.genes:
+            s += str(gene) + "\n"
+        s += "**********************************************************\n"
+        return s
