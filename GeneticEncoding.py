@@ -1,7 +1,6 @@
 import random
 import gym
 import numpy as np
-from tabulate import tabulate
 import copy
 
 from NeuralNetwork import *
@@ -45,7 +44,7 @@ class Genome:
                 gene = Gene(in_node_id, out_node_id, weight, count)
                 self.genes.append(gene)
                 count += 1
-        self.node_id = no_of_inputs + no_of_outputs + 1
+        self.node_id = no_of_inputs + no_of_outputs
     
     def mutate_weights(self, mutation_rate):
         for gene in self.genes:
@@ -69,6 +68,11 @@ class Genome:
                 # disable the previous gene
                 gene.disable()
 
+                self.node_id = max(self.node_id, gene.out_node_id, gene.in_node_id)
+                
+                # increment the node id
+                self.node_id += 1
+
                 # create two new genes and add them to the genome
                 new_gene1 = Gene(gene.in_node_id, self.node_id, 1, self.NEATAlgorithm.innovation_number)
                 self.NEATAlgorithm.innovation_number += 1
@@ -77,9 +81,10 @@ class Genome:
                 new_gene2 = Gene(self.node_id, gene.out_node_id, gene.weight, self.NEATAlgorithm.innovation_number)
                 self.NEATAlgorithm.innovation_number += 1
                 self.genes.append(new_gene2)
+                
+                
 
-                # increment the node id
-                self.node_id += 1
+                
 
     def mutate(self, mutation_rate):
         mutation_rate = mutation_rate/len(self.genes)
@@ -130,6 +135,17 @@ class Genome:
 
         network = NeuralNetwork(self.no_of_inputs, self.no_of_outputs)
 
+        # remove genes that form loops
+        for i in range(len(self.genes)):
+            for j in range(len(self.genes)):
+                if i != j:
+                    incoming_node_id_a = self.genes[i].in_node_id
+                    incoming_node_id_b = self.genes[j].in_node_id
+                    outgoing_node_id_a = self.genes[i].out_node_id
+                    outgoing_node_id_b = self.genes[j].out_node_id
+                    if incoming_node_id_a == outgoing_node_id_b and incoming_node_id_b == outgoing_node_id_a:
+                        self.genes[i].disable()
+                        
         for gene in self.genes:
             if gene.isEnabled:
                 network.add_node(gene.in_node_id)
@@ -138,12 +154,12 @@ class Genome:
         
         return network
             
-    def render(self):
+    def render(self, episodes):
         network = self.construct_network()
         env = gym.make(self.env_name)
         total_reward = 0
 
-        for i_episode in range(5):
+        for i_episode in range(episodes):
             observation = env.reset()
             while(1):
                 env.render()
@@ -158,7 +174,7 @@ class Genome:
                 if done:
                     break
         env.close()
-        print("Final Total reward: ", total_reward/5)
+        return total_reward/episodes
 
     def evaluate(self):
         network = self.construct_network()

@@ -19,22 +19,40 @@ class NEATAlgorithm:
 
     # run the NEAT algorithm
     def run(self):
+        
         # create the initial population
         for i in range(self.num_population):
             genome = Genome(self, self.no_of_inputs, self.no_of_outputs, self.env_name, self.no_of_rollouts)
             self.population.append(genome)
 
-        elites = deque(maxlen=self.R)
+        elite = None
         # run the algorithm
         for i in range(self.num_generations):
+            print("\n")
+            print("\n")
+            print("******************************************************************************************")
+            # print the generation number
+            print("Generation: " + str(i))
+            print("******************************************************************************************")
+
             
             # evaluate each genome
             for genome in self.population:
+          
                 genome.evaluate()
+                
 
             # sort the population by fitness
             self.population.sort(key=lambda x: x.fitness, reverse=True)
-            elites.append(self.population[0])
+            
+            if elite is None:
+                elite = self.population[0]
+            else:
+                if elite.fitness < self.population[0].fitness:
+                    elite = self.population[0]
+
+            # render the best performing genome
+            self.population[0].render(1)
 
             # print the best performing genome
             print("Generation: " + str(i) + " Best fitness: " + str(self.population[0].fitness))
@@ -70,4 +88,4 @@ class NEATAlgorithm:
             self.population = next_generation
 
         # return random elite
-        return random.choice(elites)
+        return elite
