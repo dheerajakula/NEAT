@@ -17,6 +17,11 @@ class NEATAlgorithm:
         self.innovation_number = no_of_inputs * no_of_outputs + 1
         self.population = []
 
+        self.bestFitnessPerGeneration = []
+        self.worstFitnessPerGeneration = []
+        self.averageFitnessPerGeneration = []
+
+
     # run the NEAT algorithm
     def run(self):
         
@@ -53,6 +58,7 @@ class NEATAlgorithm:
 
             # render the best performing genome
             self.population[0].render(1)
+            
 
             # print the best performing genome
             print("Generation: " + str(i) + " Best fitness: " + str(self.population[0].fitness))
@@ -68,6 +74,10 @@ class NEATAlgorithm:
 
             # print average fitness
             print("Average fitness: " + str(sum(fitness)/len(fitness)))
+
+            self.bestFitnessPerGeneration.append(fitness[0])
+            self.worstFitnessPerGeneration.append(fitness[-1])
+            self.averageFitnessPerGeneration.append(sum(fitness)/len(fitness))
 
             # select first R parents
             R_parents = self.population[:self.R]
@@ -88,4 +98,4 @@ class NEATAlgorithm:
             self.population = next_generation
 
         # return random elite
-        return elite
+        return elite, self.bestFitnessPerGeneration, self.worstFitnessPerGeneration, self.averageFitnessPerGeneration
